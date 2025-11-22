@@ -2,15 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace dr.BmwData.Models;
 
-public record DeviceCodeRequest(string clientId, string scope, string codeChallenge)
+public record DeviceCodeRequest(
+    [property: JsonPropertyName("client_id")] string ClientId, 
+    [property: JsonPropertyName("scope")] string Scope, 
+    [property: JsonPropertyName("code_challenge")] string CodeChallenge)
 {
-    [JsonPropertyName("client_id")] public string ClientId { get; init; } = clientId;
-
-    [JsonPropertyName("response_type")] public string ResponseType { get; init; } = "device_code";
-
-    [JsonPropertyName("scope")] public string Scope { get; init; } = scope;
-
-    [JsonPropertyName("code_challenge")] public string CodeChallenge { get; init; } = codeChallenge;
-
-    [JsonPropertyName("code_challenge_method")] public string CodeChallengeMethod { get; init; } = "S256";
+    [JsonPropertyName("response_type")] public string ResponseType { get; } = "device_code";
+    [JsonPropertyName("code_challenge_method")] public string CodeChallengeMethod { get; } = "S256";
 }

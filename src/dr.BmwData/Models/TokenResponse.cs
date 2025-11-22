@@ -2,20 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace dr.BmwData.Models;
 
-public record TokenResponse
-{
-    [JsonPropertyName("access_token")]
-    public string AccessToken { get; init; }
-
-    [JsonPropertyName("token_type")]
-    public string TokenType { get; init; }
-
-    [JsonPropertyName("expires_in")]
-    public int ExpiresIn { get; init; }
-
-    [JsonPropertyName("refresh_token")]
-    public string RefreshToken { get; init; }
-
-    [JsonPropertyName("scope")]
-    public string Scope { get; init; }
-}
+public record TokenResponse(
+    [property: JsonPropertyName("access_token")] string AccessToken,
+    [property: JsonPropertyName("token_type")] string TokenType,
+    [property: JsonPropertyName("expires_in")] int ExpiresIn,
+    [property: JsonPropertyName("refresh_token")] string RefreshToken,
+    [property: JsonPropertyName("scope")] string Scope);

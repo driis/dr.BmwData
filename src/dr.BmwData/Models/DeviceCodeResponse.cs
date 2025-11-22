@@ -2,23 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace dr.BmwData.Models;
 
-public record DeviceCodeResponse
-{
-    [JsonPropertyName("device_code")]
-    public string DeviceCode { get; init; }
-
-    [JsonPropertyName("user_code")]
-    public string UserCode { get; init; }
-
-    [JsonPropertyName("verification_uri")]
-    public string VerificationUri { get; init; }
-
-    [JsonPropertyName("verification_uri_complete")]
-    public string VerificationUriComplete { get; init; }
-
-    [JsonPropertyName("expires_in")]
-    public int ExpiresIn { get; init; }
-
-    [JsonPropertyName("interval")]
-    public int Interval { get; init; }
-}
+public record DeviceCodeResponse(
+    [property: JsonPropertyName("device_code")] string DeviceCode,
+    [property: JsonPropertyName("user_code")] string UserCode,
+    [property: JsonPropertyName("verification_uri")] string VerificationUri,
+    [property: JsonPropertyName("verification_uri_complete")] string VerificationUriComplete,
+    [property: JsonPropertyName("expires_in")] int ExpiresIn,
+    [property: JsonPropertyName("interval")] int Interval);

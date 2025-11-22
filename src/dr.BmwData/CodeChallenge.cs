@@ -5,14 +5,15 @@ namespace dr.BmwData;
 
 public sealed class CodeChallenge
 {
-    public string Challenge { get; set;  }
-    public string Verification { get; set; }
+    public string Challenge { get; private set; } = null!;
+    public string Verification { get; private set; } = null!;
+    
     public CodeChallenge()
     {
         Verification = GenerateCodeVerifier();
         Challenge = GenerateCodeChallenge(Verification);
     }
-    
+
     private string GenerateCodeVerifier()
     {
         using var rng = RandomNumberGenerator.Create();

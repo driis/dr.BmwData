@@ -13,12 +13,12 @@ public class BmwConsoleApp(IOptions<BmwOptions> options, BmwClient client, IAuth
     public async Task RunAsync(CancellationToken ct)
     {
         logger.LogInformation("BMW Open Car Data Client Demo");
-        logger.LogInformation($"Base URL: {Options.BaseUrl}");
+        logger.LogInformation($"ClientId: {Options.ClientId}");
 
         try
         {
             logger.LogInformation("Initiating device code flow...");
-            var deviceCodeResponse = await authService.InitiateDeviceFlowAsync(Options.ClientId, "authenticate_user openid cardata:api:read cardata:streaming:read");
+            var deviceCodeResponse = await authService.InitiateDeviceFlowAsync();
 
             WriteLine($"Please visit: {deviceCodeResponse.VerificationUri}");
             WriteLine($"And enter code: {deviceCodeResponse.UserCode}");
