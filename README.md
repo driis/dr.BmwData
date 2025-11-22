@@ -1,6 +1,8 @@
 # dr.BmwData
 
-A .NET library to access telemetry from [BMW Open Car Data](https://bmw-cardata.bmwgroup.com/customer/public/home). Very much work in progress.
+[![.Build](https://github.com/driis/dr.BmwData/actions/workflows/dotnet.yml/badge.svg)](https://github.com/driis/dr.BmwData/actions/workflows/dotnet.yml)
+
+A .NET library to access telemetry from [BMW Open Car Data](https://bmw-cardata.bmwgroup.com/customer/public/home). Very much work in progress. 
 
 AI Agents must read the [ARCHITECTURE.md](docs/ARCHITECTURE.md) file before any task is started.
 ## Goals
