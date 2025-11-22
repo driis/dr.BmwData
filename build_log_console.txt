@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  dr.BmwData -> C:\Users\dr\dev\dr.BmwData\src\dr.BmwData\bin\Debug\net9.0\dr.BmwData.dll
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\BmwConsoleApp.cs(23,13): error CS0234: The type or namespace name 'WriteLine' does not exist in the namespace 'dr.BmwData.Console' (are you missing an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\BmwConsoleApp.cs(24,13): error CS0234: The type or namespace name 'WriteLine' does not exist in the namespace 'dr.BmwData.Console' (are you missing an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+
+Build FAILED.
+
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\BmwConsoleApp.cs(23,13): error CS0234: The type or namespace name 'WriteLine' does not exist in the namespace 'dr.BmwData.Console' (are you missing an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\BmwConsoleApp.cs(24,13): error CS0234: The type or namespace name 'WriteLine' does not exist in the namespace 'dr.BmwData.Console' (are you missing an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:01.20

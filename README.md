@@ -1,6 +1,6 @@
 # dr.BmwData
 
-A .NET library to access telemetry from [BMW Open Car Data](https://bmw-cardata.bmwgroup.com/thirdparty/public/home). Very much work in progress. 
+A .NET library to access telemetry from [BMW Open Car Data](https://bmw-cardata.bmwgroup.com/customer/public/home). Very much work in progress. 
 
 Goals:
 [] Demonstrate how to access BMW open car data

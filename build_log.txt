@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  dr.BmwData -> C:\Users\dr\dev\dr.BmwData\src\dr.BmwData\bin\Debug\net9.0\dr.BmwData.dll
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\Program.cs(17,18): error CS1061: 'IServiceCollection' does not contain a definition for 'AddHttpClient' and no accessible extension method 'AddHttpClient' accepting a first argument of type 'IServiceCollection' could be found (are you missing a using directive or an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+
+Build FAILED.
+
+C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\Program.cs(17,18): error CS1061: 'IServiceCollection' does not contain a definition for 'AddHttpClient' and no accessible extension method 'AddHttpClient' accepting a first argument of type 'IServiceCollection' could be found (are you missing a using directive or an assembly reference?) [C:\Users\dr\dev\dr.BmwData\src\dr.BmwData.Console\dr.BmwData.Console.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.13

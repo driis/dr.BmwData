@@ -3,6 +3,7 @@ using dr.BmwData.Console;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -12,8 +13,10 @@ builder.Configuration.AddEnvironmentVariables();
 
 // Services
 builder.Services.Configure<BmwOptions>(builder.Configuration.GetSection(BmwOptions.SectionName));
-builder.Services.AddTransient<BmwClient>();
+builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
+builder.Services.AddSingleton<BmwClient>();
 builder.Services.AddTransient<BmwConsoleApp>();
+
 var host = builder.Build();
 
 // Application Logic
@@ -26,5 +29,6 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"An error occurred: {ex.Message}");
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "An error occurred.");
 }
