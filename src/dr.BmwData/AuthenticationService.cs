@@ -38,10 +38,14 @@ public class AuthenticationService : IAuthenticationService
         {
             throw new InvalidOperationException("Call InitiaiteDeviceFlowAsync before polling for ");
         }
+        
+        // Use configurable intervals from options (in milliseconds)
+        var intervalMs = _options.InitialPollIntervalMs;
+        
         var startTime = DateTime.UtcNow;
         while (DateTime.UtcNow - startTime < TimeSpan.FromSeconds(expiresIn))
         {
-            await Task.Delay(interval * 1000);
+            await Task.Delay(intervalMs);
 
             var request = new TokenRequest(clientId, deviceCode, _challenge.Verification);
             var content = ToFormUrlEncodedContent(request);
@@ -63,7 +67,7 @@ public class AuthenticationService : IAuthenticationService
             if (errorContent.Contains("slow_down"))
             {
                 _logger.LogInformation("Slow down received. Increasing interval.");
-                interval += 5;
+                intervalMs += _options.SlowDownIncrementMs;
                 continue;
             }
 

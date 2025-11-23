@@ -2,6 +2,7 @@
 
 A .NET library to access telemetry from [BMW Open Car Data](https://bmw-cardata.bmwgroup.com/customer/public/home). Very much work in progress.
 
+AI Agents must read the [ARCHITECTURE.md](docs/ARCHITECTURE.md) file before any task is started.
 ## Goals
 
 - [ ] Demonstrate how to access BMW open car data

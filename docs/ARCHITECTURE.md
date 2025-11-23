@@ -1,10 +1,20 @@
 # Architecture Documentation
 
 This document provides detailed technical information about the dr.BmwData library implementation.
+It exists both for humans, but in particular to guide AI agents on the codebase.
 
 ## Authentication
 
 The library implements the **OAuth 2.0 Device Code Flow** for authentication with the BMW CarData API.
+
+## Agent rules 
+* Before any task is started, the agent must read the ARCHITECTURE.md file.
+* The agent must always follow the rules in the ARCHITECTURE.md file.
+* When a task is completed, the agent must update the ARCHITECTURE.md file to reflect the changes.
+* When a task is completed, there must be zero build warnings or errors.
+* All tests must pass.
+* Do not make any other changes than what is required to complete the task.
+* Prefer modern C# features and patterns.
 
 ### Components
 
@@ -101,6 +111,16 @@ Configuration class that holds all BMW API settings.
   - Can be stored to avoid re-authentication
   - Used to obtain new access tokens
 
+- `InitialPollIntervalMs`: Initial polling interval in milliseconds
+  - Default: `1000` (1 second)
+  - Controls how often to poll for token during device flow
+  - Can be reduced for faster tests
+
+- `SlowDownIncrementMs`: Interval increment when slow_down is received
+  - Default: `5000` (5 seconds)
+  - Added to current interval when server requests slower polling
+  - Can be reduced for faster tests
+
 ### Configuration Sources
 
 The application supports multiple configuration sources (in order of precedence):
@@ -181,3 +201,86 @@ The authentication service handles these error scenarios:
 - `slow_down`: Polling too fast (increases interval by 5 seconds)
 - Timeout: Device code expires (throws `TimeoutException`)
 - Other errors: Throws `Exception` with error details
+
+## Testing
+
+The library includes comprehensive unit tests using **NUnit** and **WireMock.Net** for HTTP-level mocking.
+
+### Test Infrastructure
+
+**Test Project:** `dr.BmwData.Tests`
+- Framework: NUnit 3
+- HTTP Mocking: WireMock.Net
+- Target: .NET 9.0
+- Uses fast polling intervals (200ms/500ms) for quick test execution
+
+### BmwAuthMockServer
+
+Encapsulated mock server configuration type for BMW authentication endpoints.
+
+**Purpose:**
+- Wraps WireMock.Net server lifecycle
+- Provides type-safe methods to configure endpoint responses
+- Ensures all BMW authentication mocking logic is centralized and reusable
+
+**Key Methods:**
+- `SetupDeviceCodeSuccess()`: Configures device code endpoint with successful response
+- `SetupTokenSuccess()`: Configures token endpoint with successful token response
+- `SetupTokenAuthorizationPending()`: Returns authorization_pending error
+- `SetupTokenSlowDown()`: Returns slow_down error
+- `SetupTokenError()`: Returns custom error responses
+- `SetupTokenPendingThenSuccess()`: Simulates polling scenario (pending N times, then success)
+
+**Design Benefits:**
+- Tests have no direct dependency on BMW services
+- HTTP-level mocking ensures realistic integration testing
+- Encapsulation makes tests more maintainable
+- Reusable across multiple test scenarios
+
+### Running Tests
+
+Run all tests using the .NET CLI:
+
+```bash
+dotnet test dr.BmwData.sln --verbosity normal
+```
+
+Or run tests for the test project only:
+
+```bash
+dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
+```
+
+### Test Coverage
+
+**AuthenticationService Tests:**
+
+1. `InitiateDeviceFlowAsync_Success_ReturnsDeviceCodeResponse`
+   - Verifies successful device code initiation
+   - Validates response contains correct device code, user code, and URLs
+
+2. `PollForTokenAsync_Success_ReturnsTokenResponse`
+   - Verifies successful token retrieval
+   - Validates access token and refresh token are returned
+
+3. `PollForTokenAsync_AuthorizationPending_ThenSuccess_ReturnsToken`
+   - Tests polling behavior when authorization is pending
+   - Verifies service continues polling until success
+
+4. `PollForTokenAsync_SlowDown_IncreasesInterval`
+   - Tests slow_down error handling
+   - Verifies polling interval increases by 5 seconds
+
+5. `PollForTokenAsync_Timeout_ThrowsTimeoutException`
+   - Tests timeout scenario when device code expires
+   - Verifies `TimeoutException` is thrown
+
+6. `PollForTokenAsync_Error_ThrowsException`
+   - Tests error handling for unexpected errors
+   - Verifies exception contains error details
+
+7. `PollForTokenAsync_WithoutInitiate_ThrowsInvalidOperationException`
+   - Tests that polling without initiation fails
+   - Verifies `InvalidOperationException` is thrown
+
+All tests use the `BmwAuthMockServer` to mock HTTP endpoints, ensuring tests are fast, reliable, and independent of external services.
