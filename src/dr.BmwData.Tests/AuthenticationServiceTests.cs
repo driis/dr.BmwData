@@ -196,4 +196,35 @@ public class AuthenticationServiceTests
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 10));
     }
+
+    [Test]
+    public async Task RefreshTokenAsync_Success_ReturnsTokenResponse()
+    {
+        // Arrange
+        const string refreshToken = "valid-refresh-token";
+        const string expectedAccessToken = "new-access-token";
+        const string expectedNewRefreshToken = "new-refresh-token";
+
+        _mockServer.SetupRefreshTokenSuccess(expectedAccessToken, expectedNewRefreshToken);
+
+        // Act
+        var result = await _authService.RefreshTokenAsync(refreshToken);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.AccessToken, Is.EqualTo(expectedAccessToken));
+        Assert.That(result.RefreshToken, Is.EqualTo(expectedNewRefreshToken));
+    }
+
+    [Test]
+    public void RefreshTokenAsync_Error_ThrowsException()
+    {
+        // Arrange
+        const string refreshToken = "invalid-refresh-token";
+        _mockServer.SetupRefreshTokenError();
+
+        // Act & Assert
+        Assert.ThrowsAsync<HttpRequestException>(async () =>
+            await _authService.RefreshTokenAsync(refreshToken));
+    }
 }

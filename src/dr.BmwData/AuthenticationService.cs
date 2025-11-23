@@ -78,6 +78,18 @@ public class AuthenticationService : IAuthenticationService
         throw new TimeoutException("Device code flow timed out.");
     }
 
+    public async Task<TokenResponse> RefreshTokenAsync(string refreshToken)
+    {
+        var request = new RefreshTokenRequest(_options.ClientId, refreshToken);
+        var content = ToFormUrlEncodedContent(request);
+
+        var response = await _httpClient.PostAsync($"{_options.DeviceFlowBaseUrl}/gcdm/oauth/token", content);
+
+        response.EnsureSuccessStatusCode();
+
+        return (await response.Content.ReadFromJsonAsync<TokenResponse>())!;
+    }
+
     private static FormUrlEncodedContent ToFormUrlEncodedContent<T>(T request)
     {
         var json = System.Text.Json.JsonSerializer.Serialize(request);

@@ -188,6 +188,44 @@ public class BmwAuthMockServer : IDisposable
     }
 
     /// <summary>
+    /// Configures the token endpoint to return a successful refresh token response.
+    /// </summary>
+    public void SetupRefreshTokenSuccess(string accessToken, string refreshToken, int expiresIn = 3600)
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath("/gcdm/oauth/token")
+                .WithBody(new WireMock.Matchers.WildcardMatcher("*grant_type=refresh_token*"))
+                .UsingPost())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody($@"{{
+                    ""access_token"": ""{accessToken}"",
+                    ""token_type"": ""Bearer"",
+                    ""expires_in"": {expiresIn},
+                    ""refresh_token"": ""{refreshToken}"",
+                    ""scope"": ""authenticate_user openid cardata:api:read""
+                }}"));
+    }
+
+    /// <summary>
+    /// Configures the token endpoint to return an error for refresh token request.
+    /// </summary>
+    public void SetupRefreshTokenError()
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath("/gcdm/oauth/token")
+                .WithBody(new WireMock.Matchers.WildcardMatcher("*grant_type=refresh_token*"))
+                .UsingPost())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.BadRequest)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(@"{""error"": ""invalid_grant""}"));
+    }
+
+    /// <summary>
     /// Resets all configured mappings.
     /// </summary>
     public void Reset()
