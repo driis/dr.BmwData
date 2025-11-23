@@ -10,9 +10,9 @@ public class BmwOptions
     public string RefreshToken { get; set; }  = string.Empty;
     
     /// <summary>
-    /// Initial polling interval in milliseconds. Default is 1000ms (1 second).
+    /// Initial polling interval in milliseconds. Default is 2000ms (2 seconds).
     /// </summary>
-    public int InitialPollIntervalMs { get; set; } = 1000;
+    public int InitialPollIntervalMs { get; set; } = 2000;
     
     /// <summary>
     /// Interval increment in milliseconds when slow_down is received. Default is 5000ms (5 seconds).
