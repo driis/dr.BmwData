@@ -13,17 +13,19 @@ public class AuthenticationServiceTests
     private AuthenticationService _authService = null!;
     private BmwOptions _options = null!;
 
+    // Low interval for fast tests (0 seconds = immediate polling)
+    private const int TestIntervalSeconds = 0;
+
     [SetUp]
     public void Setup()
     {
         _mockServer = new BmwAuthMockServer();
-        
+
         _options = new BmwOptions
         {
             ClientId = "test-client-id",
             DeviceFlowBaseUrl = _mockServer.BaseUrl,
             BaseUrl = "https://mock.bmw.com",
-            InitialPollIntervalMs = 200,  // Fast polling for tests
             SlowDownIncrementMs = 500     // Fast increment for tests
         };
 
@@ -39,6 +41,21 @@ public class AuthenticationServiceTests
     {
         _mockServer?.Dispose();
     }
+
+    /// <summary>
+    /// Creates a DeviceCodeResponse for testing with a low interval for fast polling.
+    /// </summary>
+    private static DeviceCodeResponse CreateTestDeviceCodeResponse(
+        string deviceCode,
+        int expiresIn = 30,
+        int interval = TestIntervalSeconds) =>
+        new(
+            DeviceCode: deviceCode,
+            UserCode: "TEST-CODE",
+            VerificationUri: "https://test.bmw.com/verify",
+            VerificationUriComplete: "https://test.bmw.com/verify?code=TEST-CODE",
+            ExpiresIn: expiresIn,
+            Interval: interval);
 
     [Test]
     public async Task InitiateDeviceFlowAsync_Success_ReturnsDeviceCodeResponse()
@@ -64,7 +81,7 @@ public class AuthenticationServiceTests
     }
 
     [Test]
-    public async Task PollForTokenAsync_Success_ReturnsTokenResponse()
+    public async Task PollForTokenAsync_Success_StoresToken()
     {
         // Arrange
         const string expectedAccessToken = "test-access-token";
@@ -80,17 +97,16 @@ public class AuthenticationServiceTests
         _mockServer.SetupTokenSuccess(expectedAccessToken, expectedRefreshToken);
 
         // Act
-        var result = await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 10);
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
 
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.AccessToken, Is.EqualTo(expectedAccessToken));
-        Assert.That(result.RefreshToken, Is.EqualTo(expectedRefreshToken));
-        Assert.That(result.TokenType, Is.EqualTo("Bearer"));
+        // Assert - verify token is stored by calling GetAccessTokenAsync
+        var storedToken = await _authService.GetAccessTokenAsync();
+        Assert.That(storedToken, Is.EqualTo(expectedAccessToken));
     }
 
     [Test]
-    public async Task PollForTokenAsync_AuthorizationPending_ThenSuccess_ReturnsToken()
+    public async Task PollForTokenAsync_AuthorizationPending_ThenSuccess_StoresToken()
     {
         // Arrange
         const string expectedAccessToken = "test-access-token";
@@ -106,12 +122,12 @@ public class AuthenticationServiceTests
         _mockServer.SetupTokenPendingThenSuccess(2, expectedAccessToken, expectedRefreshToken);
 
         // Act
-        var result = await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 30);
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 30);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
 
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.AccessToken, Is.EqualTo(expectedAccessToken));
-        Assert.That(result.RefreshToken, Is.EqualTo(expectedRefreshToken));
+        // Assert - verify token is stored
+        var storedToken = await _authService.GetAccessTokenAsync();
+        Assert.That(storedToken, Is.EqualTo(expectedAccessToken));
     }
 
     [Test]
@@ -130,17 +146,17 @@ public class AuthenticationServiceTests
         _mockServer.Reset();
         _mockServer.SetupTokenSlowDownThenSuccess(expectedAccessToken, expectedRefreshToken);
 
-        // Act
+        // Act - use 0 interval so the only delay comes from slow_down increment
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 30, interval: 0);
         var startTime = DateTime.UtcNow;
-        var result = await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 30);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
         var elapsed = DateTime.UtcNow - startTime;
 
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.AccessToken, Is.EqualTo(expectedAccessToken));
-        Assert.That(result.RefreshToken, Is.EqualTo(expectedRefreshToken));
-        // Verify that the delay increased (200ms initial + 700ms after slow_down = 900ms total)
-        Assert.That(elapsed.TotalMilliseconds, Is.GreaterThan(600));
+        // Assert - verify token is stored and delay increased
+        var storedToken = await _authService.GetAccessTokenAsync();
+        Assert.That(storedToken, Is.EqualTo(expectedAccessToken));
+        // Verify that the delay increased (0ms initial + 500ms after slow_down = 500ms minimum)
+        Assert.That(elapsed.TotalMilliseconds, Is.GreaterThan(400));
     }
 
     [Test]
@@ -157,9 +173,10 @@ public class AuthenticationServiceTests
         _mockServer.Reset();
         _mockServer.SetupTokenAuthorizationPending();
 
-        // Act & Assert
+        // Act & Assert - use short expiry to trigger timeout quickly
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 1, interval: 0);
         var exception = Assert.ThrowsAsync<TimeoutException>(async () =>
-            await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 3));
+            await _authService.PollForTokenAsync(deviceCodeResponse));
         Assert.That(exception, Is.Not.Null);
     }
 
@@ -179,8 +196,9 @@ public class AuthenticationServiceTests
         _mockServer.SetupTokenError(expectedError, "The device code is invalid");
 
         // Act & Assert
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
         var ex = Assert.ThrowsAsync<Exception>(async () =>
-            await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 10));
+            await _authService.PollForTokenAsync(deviceCodeResponse));
 
         Assert.That(ex.Message, Does.Contain("Token polling failed"));
         Assert.That(ex.Message, Does.Contain(expectedError));
@@ -190,41 +208,162 @@ public class AuthenticationServiceTests
     public void PollForTokenAsync_WithoutInitiate_ThrowsInvalidOperationException()
     {
         // Arrange
-        const string deviceCode = "device-123";
+        var deviceCodeResponse = CreateTestDeviceCodeResponse("device-123", expiresIn: 10);
 
         // Act & Assert
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _authService.PollForTokenAsync(_options.ClientId, deviceCode, interval: 1, expiresIn: 10));
+            await _authService.PollForTokenAsync(deviceCodeResponse));
     }
 
     [Test]
-    public async Task RefreshTokenAsync_Success_ReturnsTokenResponse()
+    public void RequiresInteractiveFlow_NoTokenAndNoRefreshToken_ReturnsTrue()
+    {
+        // Arrange - service has no token and no configured refresh token
+
+        // Act
+        var result = _authService.RequiresInteractiveFlow;
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public void RequiresInteractiveFlow_WithConfiguredRefreshToken_ReturnsFalse()
+    {
+        // Arrange - service with configured refresh token
+        var optionsWithRefreshToken = new BmwOptions
+        {
+            ClientId = "test-client-id",
+            DeviceFlowBaseUrl = _mockServer.BaseUrl,
+            RefreshToken = "configured-refresh-token",
+            SlowDownIncrementMs = 500
+        };
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(optionsWithRefreshToken);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithRefresh = new AuthenticationService(httpClient, optionsWrapper, logger);
+
+        // Act
+        var result = authServiceWithRefresh.RequiresInteractiveFlow;
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task RequiresInteractiveFlow_AfterDeviceFlow_ReturnsFalse()
+    {
+        // Arrange - complete device flow to store token
+        const string deviceCode = "device-123";
+        _mockServer.SetupDeviceCodeSuccess(deviceCode, "USER-CODE");
+        await _authService.InitiateDeviceFlowAsync("test-scope");
+
+        _mockServer.Reset();
+        _mockServer.SetupTokenSuccess("access-token", "refresh-token");
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
+
+        // Act
+        var result = _authService.RequiresInteractiveFlow;
+
+        // Assert
+        Assert.That(result, Is.False);
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_AfterDeviceFlow_ReturnsStoredToken()
     {
         // Arrange
-        const string refreshToken = "valid-refresh-token";
+        const string expectedAccessToken = "test-access-token";
+        const string expectedRefreshToken = "test-refresh-token";
+        const string deviceCode = "device-123";
+
+        // Complete device flow
+        _mockServer.SetupDeviceCodeSuccess(deviceCode, "USER-CODE");
+        await _authService.InitiateDeviceFlowAsync("test-scope");
+
+        _mockServer.Reset();
+        _mockServer.SetupTokenSuccess(expectedAccessToken, expectedRefreshToken);
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
+
+        // Act
+        var result = await _authService.GetAccessTokenAsync();
+
+        // Assert
+        Assert.That(result, Is.EqualTo(expectedAccessToken));
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WithConfiguredRefreshToken_RefreshesAndReturnsToken()
+    {
+        // Arrange
         const string expectedAccessToken = "new-access-token";
         const string expectedNewRefreshToken = "new-refresh-token";
+
+        // Create service with configured refresh token
+        var optionsWithRefreshToken = new BmwOptions
+        {
+            ClientId = "test-client-id",
+            DeviceFlowBaseUrl = _mockServer.BaseUrl,
+            RefreshToken = "configured-refresh-token",
+            InitialPollIntervalMs = 200,
+            SlowDownIncrementMs = 500
+        };
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(optionsWithRefreshToken);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithRefresh = new AuthenticationService(httpClient, optionsWrapper, logger);
 
         _mockServer.SetupRefreshTokenSuccess(expectedAccessToken, expectedNewRefreshToken);
 
         // Act
-        var result = await _authService.RefreshTokenAsync(refreshToken);
+        var result = await authServiceWithRefresh.GetAccessTokenAsync();
 
         // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result.AccessToken, Is.EqualTo(expectedAccessToken));
-        Assert.That(result.RefreshToken, Is.EqualTo(expectedNewRefreshToken));
+        Assert.That(result, Is.EqualTo(expectedAccessToken));
     }
 
     [Test]
-    public void RefreshTokenAsync_Error_ThrowsException()
+    public void GetAccessTokenAsync_NoTokenAndNoRefreshToken_ThrowsInvalidOperationException()
     {
-        // Arrange
-        const string refreshToken = "invalid-refresh-token";
-        _mockServer.SetupRefreshTokenError();
+        // Arrange - service has no token and no configured refresh token
 
         // Act & Assert
-        Assert.ThrowsAsync<HttpRequestException>(async () =>
-            await _authService.RefreshTokenAsync(refreshToken));
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _authService.GetAccessTokenAsync());
+
+        Assert.That(ex!.Message, Does.Contain("No valid access token available"));
+        Assert.That(ex.Message, Does.Contain("InitiateDeviceFlowAsync"));
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_TokenNotExpired_ReturnsCachedToken()
+    {
+        // Arrange
+        const string expectedAccessToken = "test-access-token";
+        const string deviceCode = "device-123";
+
+        // Complete device flow to get initial token
+        _mockServer.SetupDeviceCodeSuccess(deviceCode, "USER-CODE");
+        await _authService.InitiateDeviceFlowAsync("test-scope");
+
+        _mockServer.Reset();
+        _mockServer.SetupTokenSuccess(expectedAccessToken, "refresh-token");
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
+        await _authService.PollForTokenAsync(deviceCodeResponse);
+
+        // Reset mock to verify no additional calls are made
+        _mockServer.Reset();
+
+        // Act - call twice
+        var result1 = await _authService.GetAccessTokenAsync();
+        var result2 = await _authService.GetAccessTokenAsync();
+
+        // Assert - both should return the same cached token
+        Assert.That(result1, Is.EqualTo(expectedAccessToken));
+        Assert.That(result2, Is.EqualTo(expectedAccessToken));
     }
 }

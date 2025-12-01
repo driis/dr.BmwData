@@ -19,18 +19,56 @@ The library implements the **OAuth 2.0 Device Code Flow** for authentication wit
 ### Components
 
 #### IAuthenticationService / AuthenticationService
-Handles the device code flow authentication process.
+Handles authentication and token management for the BMW CarData API.
+
+**Token Management:**
+- Stores access token and refresh token internally after successful authentication
+- Automatically refreshes expired tokens using the refresh token
+- Supports configured refresh token from `BmwOptions.RefreshToken`
+
+**Properties:**
+- `RequiresInteractiveFlow`: Checks if interactive device flow is needed
+  - Returns `true` if no valid access token exists and no refresh token is available
+  - Returns `false` if token can be obtained automatically (via cache or refresh)
 
 **Methods:**
-- `InitiateDeviceFlowAsync(string scope)`: Starts the authentication flow
+- `GetAccessTokenAsync()`: Gets a valid access token
+  - Returns cached token if not expired
+  - Uses refresh token to obtain new access token if expired
+  - Throws `InvalidOperationException` if no token and no refresh token configured
+
+- `InitiateDeviceFlowAsync(string scope)`: Starts the interactive authentication flow
   - Creates a PKCE challenge
   - Sends device code request to BMW auth server
   - Returns `DeviceCodeResponse` with user code and verification URL
-  
-- `PollForTokenAsync(string clientId, string deviceCode, int interval, int expiresIn)`: Polls for access token
+
+- `PollForTokenAsync(DeviceCodeResponse deviceCodeResponse)`: Polls for access token
+  - Takes the `DeviceCodeResponse` from `InitiateDeviceFlowAsync`
+  - Uses the interval and expiration from the response (respects server's polling interval)
   - Waits for user to authorize via browser
   - Handles `authorization_pending` and `slow_down` responses
-  - Returns `TokenResponse` with access token and refresh token
+  - Stores token internally upon success
+
+**Private Methods:**
+- `RefreshTokenAsync(string refreshToken)`: Refreshes the access token internally
+  - Called automatically by `GetAccessTokenAsync()` when token is expired
+
+#### IContainerService / ContainerService
+Handles container management for the BMW CarData API. Uses `IAuthenticationService` internally to obtain access tokens.
+
+**Methods:**
+- `CreateContainerAsync(string[] technicalDescriptors)`: Creates a new container
+  - Takes an array of technical descriptors (e.g., "FUEL_LEVEL", "MILEAGE", "CHARGING_STATUS")
+  - Returns `ContainerResponse` with container ID, state, and creation timestamp
+
+- `ListContainersAsync()`: Lists all containers
+  - Returns `ContainerListResponse` with array of `ContainerSummary` objects
+
+- `GetContainerAsync(string containerId)`: Gets container details
+  - Returns `ContainerResponse` with full container details including technical descriptors
+
+- `DeleteContainerAsync(string containerId)`: Deletes a container
+  - Returns void on success (HTTP 204 No Content)
 
 #### CodeChallenge
 Generates PKCE (Proof Key for Code Exchange) values for secure authentication.
@@ -63,6 +101,23 @@ All models use **C# records with primary constructors**:
 
 - `TokenResponse`: Access token response
   - `AccessToken`, `TokenType`, `ExpiresIn`, `RefreshToken`, `Scope`
+
+#### Container Models
+
+- `CreateContainerRequest`: Request to create a new container
+  - `Name`, `Purpose`, `TechnicalDescriptors`
+
+- `ContainerResponse`: Response from container creation/get details
+  - `ContainerId`, `Name`, `Purpose`, `State`, `Created`, `TechnicalDescriptors`
+
+- `ContainerListResponse`: Response from list containers
+  - `Containers` (array of `ContainerSummary`)
+
+- `ContainerSummary`: Summary of a container (without technical descriptors)
+  - `ContainerId`, `Name`, `Purpose`, `State`, `Created`
+
+- `ContainerState`: Enum representing container state
+  - `ACTIVE`, `DELETED`
 
 ### Authentication Flow
 
@@ -106,6 +161,10 @@ Configuration class that holds all BMW API settings.
 - `BaseUrl`: BMW API base URL
   - Default: `https://bmw-cardata.bmwgroup.com/thirdparty/public/home`
   - Used for API data requests
+
+- `ApiBaseUrl`: BMW CarData API base URL
+  - Default: `https://api-cardata.bmwgroup.com`
+  - Used for container and telemetry API endpoints
 
 - `RefreshToken`: Optional refresh token
   - Can be stored to avoid re-authentication
@@ -151,6 +210,7 @@ builder.Services.Configure<BmwOptions>(
     builder.Configuration.GetSection(BmwOptions.SectionName));
 
 builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
+builder.Services.AddHttpClient<IContainerService, ContainerService>();
 ```
 
 ## Design Patterns
@@ -192,6 +252,28 @@ builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
 - Content-Type: `application/x-www-form-urlencoded`
 - Request: `TokenRequest`
 - Response: `TokenResponse` or error
+
+### Container Endpoints
+
+All container endpoints require headers: `Authorization: Bearer {accessToken}`, `x-version: v1`
+
+**Create Container:**
+- URL: `POST {ApiBaseUrl}/customers/containers`
+- Content-Type: `application/json`
+- Request: `CreateContainerRequest`
+- Response: `ContainerResponse` (HTTP 201)
+
+**List Containers:**
+- URL: `GET {ApiBaseUrl}/customers/containers`
+- Response: `ContainerListResponse` (HTTP 200)
+
+**Get Container:**
+- URL: `GET {ApiBaseUrl}/customers/containers/{containerId}`
+- Response: `ContainerResponse` (HTTP 200)
+
+**Delete Container:**
+- URL: `DELETE {ApiBaseUrl}/customers/containers/{containerId}`
+- Response: No content (HTTP 204)
 
 ### Error Handling
 
@@ -236,6 +318,27 @@ Encapsulated mock server configuration type for BMW authentication endpoints.
 - HTTP-level mocking ensures realistic integration testing
 - Encapsulation makes tests more maintainable
 - Reusable across multiple test scenarios
+
+### BmwApiMockServer
+
+Encapsulated mock server configuration type for BMW CarData API endpoints.
+
+**Purpose:**
+- Wraps WireMock.Net server lifecycle for API endpoints
+- Provides type-safe methods to configure container endpoint responses
+- Ensures all BMW API mocking logic is centralized and reusable
+
+**Key Methods:**
+- `SetupCreateContainerSuccess()`: Configures container creation endpoint with successful response
+- `SetupCreateContainerUnauthorized()`: Returns 401 unauthorized error
+- `SetupCreateContainerBadRequest()`: Returns 400 bad request error
+- `SetupListContainersSuccess()`: Configures list containers endpoint with successful response
+- `SetupListContainersEmpty()`: Returns empty container list
+- `SetupListContainersUnauthorized()`: Returns 401 unauthorized error
+- `SetupGetContainerSuccess()`: Configures get container endpoint with successful response
+- `SetupGetContainerNotFound()`: Returns 404 not found error
+- `SetupDeleteContainerSuccess()`: Configures delete container endpoint with 204 response
+- `SetupDeleteContainerNotFound()`: Returns 404 not found error
 
 ### Running Tests
 
@@ -283,4 +386,61 @@ dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
    - Tests that polling without initiation fails
    - Verifies `InvalidOperationException` is thrown
 
-All tests use the `BmwAuthMockServer` to mock HTTP endpoints, ensuring tests are fast, reliable, and independent of external services.
+8. `RequiresInteractiveFlow_NoTokenAndNoRefreshToken_ReturnsTrue`
+   - Tests that interactive flow is required when no tokens available
+
+9. `RequiresInteractiveFlow_WithConfiguredRefreshToken_ReturnsFalse`
+   - Tests that interactive flow is not required when refresh token is configured
+
+10. `RequiresInteractiveFlow_AfterDeviceFlow_ReturnsFalse`
+    - Tests that interactive flow is not required after successful device flow
+
+11. `GetAccessTokenAsync_AfterDeviceFlow_ReturnsStoredToken`
+    - Verifies token is stored and returned after device flow
+
+12. `GetAccessTokenAsync_WithConfiguredRefreshToken_RefreshesAndReturnsToken`
+    - Tests automatic token refresh when refresh token is configured
+
+13. `GetAccessTokenAsync_NoTokenAndNoRefreshToken_ThrowsInvalidOperationException`
+    - Tests error when no token available
+
+14. `GetAccessTokenAsync_TokenNotExpired_ReturnsCachedToken`
+    - Verifies cached token is returned without refreshing
+
+**ContainerService Tests:**
+
+1. `CreateContainerAsync_Success_ReturnsContainerResponse`
+   - Verifies successful container creation
+   - Validates response contains correct container ID, name, purpose, and state
+
+2. `CreateContainerAsync_WithSingleDescriptor_ReturnsContainerResponse`
+   - Tests container creation with a single technical descriptor
+
+3. `CreateContainerAsync_Unauthorized_ThrowsHttpRequestException`
+   - Tests 401 unauthorized error handling
+
+4. `CreateContainerAsync_BadRequest_ThrowsHttpRequestException`
+   - Tests 400 bad request error handling for invalid descriptors
+
+5. `ListContainersAsync_Success_ReturnsContainerList`
+   - Verifies successful container listing with multiple containers
+
+6. `ListContainersAsync_Empty_ReturnsEmptyList`
+   - Tests empty container list response
+
+7. `ListContainersAsync_Unauthorized_ThrowsHttpRequestException`
+   - Tests 401 unauthorized error handling for list operation
+
+8. `GetContainerAsync_Success_ReturnsContainerResponse`
+   - Verifies successful container retrieval with full details
+
+9. `GetContainerAsync_NotFound_ThrowsHttpRequestException`
+   - Tests 404 not found error handling
+
+10. `DeleteContainerAsync_Success_Completes`
+    - Verifies successful container deletion (no exception thrown)
+
+11. `DeleteContainerAsync_NotFound_ThrowsHttpRequestException`
+    - Tests 404 not found error handling for delete operation
+
+All tests use mock servers (`BmwAuthMockServer` and `BmwApiMockServer`) to mock HTTP endpoints, ensuring tests are fast, reliable, and independent of external services.
