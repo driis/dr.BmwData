@@ -25,6 +25,7 @@ public interface IAuthenticationService
     /// <summary>
     /// Polls for a token after initiating the device flow. Stores the token internally upon success.
     /// Uses the interval and expiration from the DeviceCodeResponse.
+    /// Returns the refresh token so it can be saved for future use.
     /// </summary>
-    Task PollForTokenAsync(DeviceCodeResponse deviceCodeResponse);
+    Task<string> PollForTokenAsync(DeviceCodeResponse deviceCodeResponse);
 }

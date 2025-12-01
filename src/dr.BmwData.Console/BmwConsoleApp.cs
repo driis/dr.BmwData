@@ -45,8 +45,12 @@ public class BmwConsoleApp(
                 WriteLine();
 
                 logger.LogInformation("Polling for token...");
-                await authService.PollForTokenAsync(deviceCodeResponse);
+                var refreshToken = await authService.PollForTokenAsync(deviceCodeResponse);
                 WriteLine("Authentication successful!");
+                WriteLine();
+                WriteLine("Save this refresh token to skip interactive login next time:");
+                WriteLine($"  Environment variable: BmwData__RefreshToken={refreshToken}");
+                WriteLine($"  Or in appsettings.json: \"RefreshToken\": \"{refreshToken}\"");
                 WriteLine();
             }
             catch (Exception ex)

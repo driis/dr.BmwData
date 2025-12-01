@@ -80,7 +80,7 @@ public class AuthenticationService : IAuthenticationService
         return (await response.Content.ReadFromJsonAsync<DeviceCodeResponse>())!;
     }
 
-    public async Task PollForTokenAsync(DeviceCodeResponse deviceCode)
+    public async Task<string> PollForTokenAsync(DeviceCodeResponse deviceCode)
     {
         if ( _challenge == null)
         {
@@ -104,7 +104,7 @@ public class AuthenticationService : IAuthenticationService
             {
                 var tokenResponse = (await response.Content.ReadFromJsonAsync<TokenResponse>())!;
                 StoreToken(tokenResponse);
-                return;
+                return tokenResponse.RefreshToken;
             }
 
             var errorContent = await response.Content.ReadAsStringAsync();

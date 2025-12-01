@@ -27,7 +27,7 @@ public class MockAuthenticationService : IAuthenticationService
         throw new NotImplementedException("Use real AuthenticationService for device flow tests");
     }
 
-    public Task PollForTokenAsync(DeviceCodeResponse deviceCodeResponse)
+    public Task<string> PollForTokenAsync(DeviceCodeResponse deviceCodeResponse)
     {
         throw new NotImplementedException("Use real AuthenticationService for device flow tests");
     }

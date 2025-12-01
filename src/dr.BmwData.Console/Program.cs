@@ -13,7 +13,8 @@ builder.Configuration.AddEnvironmentVariables();
 
 // Services
 builder.Services.Configure<BmwOptions>(builder.Configuration.GetSection(BmwOptions.SectionName));
-builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
+builder.Services.AddHttpClient<AuthenticationService>();
+builder.Services.AddSingleton<IAuthenticationService>(sp => sp.GetRequiredService<AuthenticationService>());
 builder.Services.AddHttpClient<IContainerService, ContainerService>();
 builder.Services.AddTransient<BmwConsoleApp>();
 

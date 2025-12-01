@@ -32,6 +32,7 @@ The library implements **OAuth 2.0 Device Code Flow** for authentication and use
 }
 ```
 
+Note the clientId can be found for your car in BMW ConnectedDrive: https://www.bmw.de/de-de/mybmw/vehicle-overview 
 2. **Run** the console app:
 ```bash
 cd src/dr.BmwData.Console
