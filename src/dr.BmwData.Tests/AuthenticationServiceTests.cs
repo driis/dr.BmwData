@@ -366,4 +366,51 @@ public class AuthenticationServiceTests
         Assert.That(result1, Is.EqualTo(expectedAccessToken));
         Assert.That(result2, Is.EqualTo(expectedAccessToken));
     }
+
+    [Test]
+    public void InitiateDeviceFlowAsync_MissingClientId_ThrowsInvalidOperationException()
+    {
+        // Arrange - create service with empty ClientId
+        var optionsWithoutClientId = new BmwOptions
+        {
+            ClientId = "",
+            DeviceFlowBaseUrl = _mockServer.BaseUrl,
+            SlowDownIncrementMs = 500
+        };
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(optionsWithoutClientId);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithoutClientId = new AuthenticationService(httpClient, optionsWrapper, logger);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await authServiceWithoutClientId.InitiateDeviceFlowAsync("test-scope"));
+
+        Assert.That(ex!.Message, Does.Contain("ClientId is not configured"));
+        Assert.That(ex.Message, Does.Contain("BmwOptions.ClientId"));
+    }
+
+    [Test]
+    public void InitiateDeviceFlowAsync_NullClientId_ThrowsInvalidOperationException()
+    {
+        // Arrange - create service with null ClientId
+        var optionsWithNullClientId = new BmwOptions
+        {
+            ClientId = null!,
+            DeviceFlowBaseUrl = _mockServer.BaseUrl,
+            SlowDownIncrementMs = 500
+        };
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(optionsWithNullClientId);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithNullClientId = new AuthenticationService(httpClient, optionsWrapper, logger);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await authServiceWithNullClientId.InitiateDeviceFlowAsync("test-scope"));
+
+        Assert.That(ex!.Message, Does.Contain("ClientId is not configured"));
+    }
 }

@@ -1,21 +1,37 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using static System.Console;
 
 using dr.BmwData;
 
 namespace dr.BmwData.Console;
 
-public class BmwConsoleApp(IOptions<BmwOptions> options, IAuthenticationService authService, ILogger<BmwConsoleApp> logger)
+public class BmwConsoleApp(
+    IAuthenticationService authService,
+    IContainerService containerService,
+    ILogger<BmwConsoleApp> logger)
 {
-    public BmwOptions Options { get; } = options.Value;
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public async Task RunAsync(CancellationToken ct)
+    public async Task RunAsync(CommandLineArgs args, CancellationToken ct)
     {
-        logger.LogInformation("BMW Open Car Data Client Demo");
-        logger.LogInformation($"ClientId: {Options.ClientId}");
+        // Handle help command immediately (no authentication needed)
+        if (args.Command == Command.Help)
+        {
+            CommandLineArgs.PrintHelp();
+            return;
+        }
 
-        // Check if interactive authentication is needed
+        // Ensure authentication for all other commands
+        if (!await EnsureAuthenticatedAsync())
+            return;
+
+        // Execute the requested command
+        await ExecuteCommandAsync(args);
+    }
+
+    private async Task<bool> EnsureAuthenticatedAsync()
+    {
         if (authService.RequiresInteractiveFlow)
         {
             try
@@ -23,31 +39,107 @@ public class BmwConsoleApp(IOptions<BmwOptions> options, IAuthenticationService 
                 WriteLine("No valid token available. Initiating device code flow...");
                 var deviceCodeResponse = await authService.InitiateDeviceFlowAsync();
 
+                WriteLine();
                 WriteLine($"Please visit: {deviceCodeResponse.VerificationUri}");
                 WriteLine($"And enter code: {deviceCodeResponse.UserCode}");
+                WriteLine();
 
                 logger.LogInformation("Polling for token...");
                 await authService.PollForTokenAsync(deviceCodeResponse);
+                WriteLine("Authentication successful!");
+                WriteLine();
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Authentication failed.");
-                return;
+                WriteLine($"Authentication failed: {ex.Message}");
+                return false;
             }
         }
 
-        // Get access token (will use cached token or refresh automatically)
+        return true;
+    }
+
+    private async Task ExecuteCommandAsync(CommandLineArgs args)
+    {
         try
         {
-            var accessToken = await authService.GetAccessTokenAsync();
-            logger.LogInformation("Successfully authenticated!");
-            logger.LogDebug($"Access Token: {accessToken[..20]}...");
-
-            // TODO: Use ContainerService or other services that now handle tokens internally
+            switch (args.Command)
+            {
+                case Command.List:
+                    await ListContainersAsync();
+                    break;
+                case Command.Create:
+                    await CreateContainerAsync(args.TechnicalDescriptors!);
+                    break;
+                case Command.Get:
+                    await GetContainerAsync(args.ContainerId!);
+                    break;
+                case Command.Delete:
+                    await DeleteContainerAsync(args.ContainerId!);
+                    break;
+            }
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            logger.LogError(ex, "Failed to get access token.");
+            logger.LogError(ex, "API request failed.");
+            WriteLine($"Error: {ex.Message}");
         }
+    }
+
+    private async Task ListContainersAsync()
+    {
+        WriteLine("Fetching containers...");
+        var response = await containerService.ListContainersAsync();
+
+        if (response.Containers.Length == 0)
+        {
+            WriteLine("No containers found.");
+            return;
+        }
+
+        WriteLine($"Found {response.Containers.Length} container(s):");
+        WriteLine();
+
+        foreach (var container in response.Containers)
+        {
+            WriteLine($"  ID:      {container.ContainerId}");
+            WriteLine($"  Name:    {container.Name}");
+            WriteLine($"  Purpose: {container.Purpose}");
+            WriteLine($"  State:   {container.State}");
+            WriteLine($"  Created: {container.Created:yyyy-MM-dd HH:mm:ss}");
+            WriteLine();
+        }
+    }
+
+    private async Task CreateContainerAsync(string[] technicalDescriptors)
+    {
+        WriteLine($"Creating container with descriptors: {string.Join(", ", technicalDescriptors)}");
+        var response = await containerService.CreateContainerAsync(technicalDescriptors);
+
+        WriteLine();
+        WriteLine("Container created successfully!");
+        WriteLine($"  ID:      {response.ContainerId}");
+        WriteLine($"  Name:    {response.Name}");
+        WriteLine($"  Purpose: {response.Purpose}");
+        WriteLine($"  State:   {response.State}");
+        WriteLine($"  Created: {response.Created:yyyy-MM-dd HH:mm:ss}");
+    }
+
+    private async Task GetContainerAsync(string containerId)
+    {
+        WriteLine($"Fetching container: {containerId}");
+        var response = await containerService.GetContainerAsync(containerId);
+
+        WriteLine();
+        var json = JsonSerializer.Serialize(response, JsonOptions);
+        WriteLine(json);
+    }
+
+    private async Task DeleteContainerAsync(string containerId)
+    {
+        WriteLine($"Deleting container: {containerId}");
+        await containerService.DeleteContainerAsync(containerId);
+        WriteLine("Container deleted successfully.");
     }
 }

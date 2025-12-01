@@ -38,6 +38,7 @@ Handles authentication and token management for the BMW CarData API.
   - Throws `InvalidOperationException` if no token and no refresh token configured
 
 - `InitiateDeviceFlowAsync(string scope)`: Starts the interactive authentication flow
+  - Validates that `ClientId` is configured (throws `InvalidOperationException` if missing)
   - Creates a PKCE challenge
   - Sends device code request to BMW auth server
   - Returns `DeviceCodeResponse` with user code and verification URL
@@ -407,6 +408,12 @@ dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
 14. `GetAccessTokenAsync_TokenNotExpired_ReturnsCachedToken`
     - Verifies cached token is returned without refreshing
 
+15. `InitiateDeviceFlowAsync_MissingClientId_ThrowsInvalidOperationException`
+    - Tests that empty ClientId throws exception with helpful message
+
+16. `InitiateDeviceFlowAsync_NullClientId_ThrowsInvalidOperationException`
+    - Tests that null ClientId throws exception
+
 **ContainerService Tests:**
 
 1. `CreateContainerAsync_Success_ReturnsContainerResponse`
@@ -444,3 +451,77 @@ dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
     - Tests 404 not found error handling for delete operation
 
 All tests use mock servers (`BmwAuthMockServer` and `BmwApiMockServer`) to mock HTTP endpoints, ensuring tests are fast, reliable, and independent of external services.
+
+## Console Application
+
+The solution includes a command-line console application for interacting with the BMW CarData API.
+
+### Project: dr.BmwData.Console
+
+A CLI tool for container management operations.
+
+### Command-Line Interface
+
+**Usage:**
+```bash
+dr.BmwData.Console <command> [arguments]
+```
+
+**Commands:**
+- `help` (or `-h`, `--help`, `-?`): Show help message
+- `list`: List all containers
+- `create <descriptor> [...]`: Create a container with specified technical descriptors
+- `get <containerId>`: Get container details (outputs JSON)
+- `delete <containerId>`: Delete a container
+
+**Examples:**
+```bash
+dr.BmwData.Console list
+dr.BmwData.Console create FUEL_LEVEL MILEAGE CHARGING_STATUS
+dr.BmwData.Console get abc123-container-id
+dr.BmwData.Console delete abc123-container-id
+```
+
+**Notes:**
+- Commands are case-insensitive
+- If no arguments provided, help is displayed
+- Invalid commands show error message and help
+
+### Components
+
+#### CommandLineArgs
+Record type for parsed command-line arguments.
+
+**Properties:**
+- `Command`: The command to execute (enum: Help, List, Create, Get, Delete)
+- `ContainerId`: Container ID for get/delete commands
+- `TechnicalDescriptors`: Array of descriptors for create command
+
+**Static Methods:**
+- `Parse(string[] args)`: Parses command-line arguments
+  - Throws `ArgumentException` for invalid commands or missing arguments
+- `PrintHelp()`: Displays usage information
+
+#### BmwConsoleApp
+Main application class that orchestrates command execution.
+
+**Constructor Dependencies:**
+- `IAuthenticationService`: For authentication flow
+- `IContainerService`: For container operations
+- `ILogger<BmwConsoleApp>`: For logging
+
+**Methods:**
+- `RunAsync(CommandLineArgs args, CancellationToken ct)`: Main entry point
+  - Handles help command without authentication
+  - Ensures authentication for other commands
+  - Delegates to command-specific methods
+
+**Authentication Flow:**
+- Checks `RequiresInteractiveFlow` property
+- If true, initiates device code flow and displays verification URL/code
+- User authenticates via browser
+- Polls for token completion
+
+### Exit Codes
+- `0`: Success
+- `1`: Error (invalid arguments, authentication failure, API error)

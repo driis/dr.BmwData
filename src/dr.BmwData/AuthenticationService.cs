@@ -62,6 +62,13 @@ public class AuthenticationService : IAuthenticationService
 
     public async Task<DeviceCodeResponse> InitiateDeviceFlowAsync(string scope)
     {
+        if (string.IsNullOrEmpty(_options.ClientId))
+        {
+            throw new InvalidOperationException(
+                "ClientId is not configured. Please configure BmwOptions.ClientId in appsettings.json " +
+                "or via environment variable BmwData__ClientId.");
+        }
+
         _challenge = new();
         var request = new DeviceCodeRequest(_options.ClientId, scope, _challenge.Challenge);
         var content = ToFormUrlEncodedContent(request);

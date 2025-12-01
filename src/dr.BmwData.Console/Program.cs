@@ -14,8 +14,22 @@ builder.Configuration.AddEnvironmentVariables();
 // Services
 builder.Services.Configure<BmwOptions>(builder.Configuration.GetSection(BmwOptions.SectionName));
 builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
-builder.Services.AddSingleton<BmwClient>();
+builder.Services.AddHttpClient<IContainerService, ContainerService>();
 builder.Services.AddTransient<BmwConsoleApp>();
+
+// Parse command-line arguments
+CommandLineArgs parsedArgs;
+try
+{
+    parsedArgs = CommandLineArgs.Parse(args);
+}
+catch (ArgumentException ex)
+{
+    Console.WriteLine($"Error: {ex.Message}");
+    Console.WriteLine();
+    CommandLineArgs.PrintHelp();
+    return 1;
+}
 
 var host = builder.Build();
 
@@ -25,10 +39,12 @@ var services = scope.ServiceProvider;
 
 try
 {
-    await services.GetRequiredService<BmwConsoleApp>().RunAsync(CancellationToken.None);
+    await services.GetRequiredService<BmwConsoleApp>().RunAsync(parsedArgs, CancellationToken.None);
+    return 0;
 }
 catch (Exception ex)
 {
     var logger = services.GetRequiredService<ILogger<Program>>();
     logger.LogError(ex, "An error occurred.");
+    return 1;
 }
