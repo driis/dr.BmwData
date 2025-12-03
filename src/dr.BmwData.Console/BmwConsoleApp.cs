@@ -32,7 +32,7 @@ public class BmwConsoleApp(
 
     private async Task<bool> EnsureAuthenticatedAsync()
     {
-        if (authService.RequiresInteractiveFlow)
+        if (await authService.RequiresInteractiveFlowAsync())
         {
             try
             {
@@ -45,12 +45,9 @@ public class BmwConsoleApp(
                 WriteLine();
 
                 logger.LogInformation("Polling for token...");
-                var refreshToken = await authService.PollForTokenAsync(deviceCodeResponse);
+                await authService.PollForTokenAsync(deviceCodeResponse);
                 WriteLine("Authentication successful!");
-                WriteLine();
-                WriteLine("Save this refresh token to skip interactive login next time:");
-                WriteLine($"  Environment variable: BmwData__RefreshToken={refreshToken}");
-                WriteLine($"  Or in appsettings.json: \"RefreshToken\": \"{refreshToken}\"");
+                WriteLine("Refresh token has been saved automatically.");
                 WriteLine();
             }
             catch (Exception ex)

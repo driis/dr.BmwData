@@ -12,6 +12,7 @@ public class AuthenticationServiceTests
     private BmwAuthMockServer _mockServer = null!;
     private AuthenticationService _authService = null!;
     private BmwOptions _options = null!;
+    private MockRefreshTokenStore _mockStore = null!;
 
     // Low interval for fast tests (0 seconds = immediate polling)
     private const int TestIntervalSeconds = 0;
@@ -20,6 +21,7 @@ public class AuthenticationServiceTests
     public void Setup()
     {
         _mockServer = new BmwAuthMockServer();
+        _mockStore = new MockRefreshTokenStore();
 
         _options = new BmwOptions
         {
@@ -33,7 +35,7 @@ public class AuthenticationServiceTests
         var optionsWrapper = Options.Create(_options);
         var logger = NullLogger<AuthenticationService>.Instance;
 
-        _authService = new AuthenticationService(httpClient, optionsWrapper, logger);
+        _authService = new AuthenticationService(httpClient, optionsWrapper, logger, _mockStore);
     }
 
     [TearDown]
@@ -228,30 +230,6 @@ public class AuthenticationServiceTests
     }
 
     [Test]
-    public void RequiresInteractiveFlow_WithConfiguredRefreshToken_ReturnsFalse()
-    {
-        // Arrange - service with configured refresh token
-        var optionsWithRefreshToken = new BmwOptions
-        {
-            ClientId = "test-client-id",
-            DeviceFlowBaseUrl = _mockServer.BaseUrl,
-            RefreshToken = "configured-refresh-token",
-            SlowDownIncrementMs = 500
-        };
-
-        var httpClient = new HttpClient();
-        var optionsWrapper = Options.Create(optionsWithRefreshToken);
-        var logger = NullLogger<AuthenticationService>.Instance;
-        var authServiceWithRefresh = new AuthenticationService(httpClient, optionsWrapper, logger);
-
-        // Act
-        var result = authServiceWithRefresh.RequiresInteractiveFlow;
-
-        // Assert
-        Assert.That(result, Is.False);
-    }
-
-    [Test]
     public async Task RequiresInteractiveFlow_AfterDeviceFlow_ReturnsFalse()
     {
         // Arrange - complete device flow to store token
@@ -296,40 +274,9 @@ public class AuthenticationServiceTests
     }
 
     [Test]
-    public async Task GetAccessTokenAsync_WithConfiguredRefreshToken_RefreshesAndReturnsToken()
-    {
-        // Arrange
-        const string expectedAccessToken = "new-access-token";
-        const string expectedNewRefreshToken = "new-refresh-token";
-
-        // Create service with configured refresh token
-        var optionsWithRefreshToken = new BmwOptions
-        {
-            ClientId = "test-client-id",
-            DeviceFlowBaseUrl = _mockServer.BaseUrl,
-            RefreshToken = "configured-refresh-token",
-            InitialPollIntervalMs = 200,
-            SlowDownIncrementMs = 500
-        };
-
-        var httpClient = new HttpClient();
-        var optionsWrapper = Options.Create(optionsWithRefreshToken);
-        var logger = NullLogger<AuthenticationService>.Instance;
-        var authServiceWithRefresh = new AuthenticationService(httpClient, optionsWrapper, logger);
-
-        _mockServer.SetupRefreshTokenSuccess(expectedAccessToken, expectedNewRefreshToken);
-
-        // Act
-        var result = await authServiceWithRefresh.GetAccessTokenAsync();
-
-        // Assert
-        Assert.That(result, Is.EqualTo(expectedAccessToken));
-    }
-
-    [Test]
     public void GetAccessTokenAsync_NoTokenAndNoRefreshToken_ThrowsInvalidOperationException()
     {
-        // Arrange - service has no token and no configured refresh token
+        // Arrange - service has no token and no stored refresh token
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -381,7 +328,7 @@ public class AuthenticationServiceTests
         var httpClient = new HttpClient();
         var optionsWrapper = Options.Create(optionsWithoutClientId);
         var logger = NullLogger<AuthenticationService>.Instance;
-        var authServiceWithoutClientId = new AuthenticationService(httpClient, optionsWrapper, logger);
+        var authServiceWithoutClientId = new AuthenticationService(httpClient, optionsWrapper, logger, new MockRefreshTokenStore());
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -405,7 +352,7 @@ public class AuthenticationServiceTests
         var httpClient = new HttpClient();
         var optionsWrapper = Options.Create(optionsWithNullClientId);
         var logger = NullLogger<AuthenticationService>.Instance;
-        var authServiceWithNullClientId = new AuthenticationService(httpClient, optionsWrapper, logger);
+        var authServiceWithNullClientId = new AuthenticationService(httpClient, optionsWrapper, logger, new MockRefreshTokenStore());
 
         // Act & Assert
         var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -413,4 +360,120 @@ public class AuthenticationServiceTests
 
         Assert.That(ex!.Message, Does.Contain("ClientId is not configured"));
     }
+
+    [Test]
+    public async Task RequiresInteractiveFlowAsync_WithStoredRefreshToken_ReturnsFalse()
+    {
+        // Arrange - service with refresh token in store
+        var mockStore = new MockRefreshTokenStore("stored-refresh-token");
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(_options);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithStore = new AuthenticationService(httpClient, optionsWrapper, logger, mockStore);
+
+        // Act
+        var result = await authServiceWithStore.RequiresInteractiveFlowAsync();
+
+        // Assert
+        Assert.That(result, Is.False);
+        Assert.That(mockStore.LoadCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task RequiresInteractiveFlowAsync_NoTokenAnywhere_ReturnsTrue()
+    {
+        // Arrange - service with no tokens anywhere
+        var mockStore = new MockRefreshTokenStore(null);
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(_options);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithStore = new AuthenticationService(httpClient, optionsWrapper, logger, mockStore);
+
+        // Act
+        var result = await authServiceWithStore.RequiresInteractiveFlowAsync();
+
+        // Assert
+        Assert.That(result, Is.True);
+    }
+
+    [Test]
+    public async Task GetAccessTokenAsync_WithStoredRefreshToken_RefreshesAndReturnsToken()
+    {
+        // Arrange
+        const string expectedAccessToken = "new-access-token";
+        const string expectedNewRefreshToken = "new-refresh-token";
+        var mockStore = new MockRefreshTokenStore("stored-refresh-token");
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(_options);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithStore = new AuthenticationService(httpClient, optionsWrapper, logger, mockStore);
+
+        _mockServer.SetupRefreshTokenSuccess(expectedAccessToken, expectedNewRefreshToken);
+
+        // Act
+        var result = await authServiceWithStore.GetAccessTokenAsync();
+
+        // Assert
+        Assert.That(result, Is.EqualTo(expectedAccessToken));
+        Assert.That(mockStore.LastSavedToken, Is.EqualTo(expectedNewRefreshToken));
+        Assert.That(mockStore.SaveCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task PollForTokenAsync_Success_SavesRefreshTokenToStore()
+    {
+        // Arrange
+        const string expectedAccessToken = "test-access-token";
+        const string expectedRefreshToken = "test-refresh-token";
+        const string deviceCode = "device-123";
+        var mockStore = new MockRefreshTokenStore();
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(_options);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithStore = new AuthenticationService(httpClient, optionsWrapper, logger, mockStore);
+
+        // First initiate the flow
+        _mockServer.SetupDeviceCodeSuccess(deviceCode, "USER-CODE");
+        await authServiceWithStore.InitiateDeviceFlowAsync("test-scope");
+
+        // Then set up successful token response
+        _mockServer.Reset();
+        _mockServer.SetupTokenSuccess(expectedAccessToken, expectedRefreshToken);
+
+        // Act
+        var deviceCodeResponse = CreateTestDeviceCodeResponse(deviceCode, expiresIn: 10);
+        await authServiceWithStore.PollForTokenAsync(deviceCodeResponse);
+
+        // Assert
+        Assert.That(mockStore.LastSavedToken, Is.EqualTo(expectedRefreshToken));
+        Assert.That(mockStore.SaveCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task RefreshToken_UpdatesStoredToken()
+    {
+        // Arrange - start with one refresh token, verify it gets updated
+        const string initialRefreshToken = "initial-refresh-token";
+        const string newAccessToken = "new-access-token";
+        const string newRefreshToken = "new-refresh-token";
+        var mockStore = new MockRefreshTokenStore(initialRefreshToken);
+
+        var httpClient = new HttpClient();
+        var optionsWrapper = Options.Create(_options);
+        var logger = NullLogger<AuthenticationService>.Instance;
+        var authServiceWithStore = new AuthenticationService(httpClient, optionsWrapper, logger, mockStore);
+
+        _mockServer.SetupRefreshTokenSuccess(newAccessToken, newRefreshToken);
+
+        // Act
+        await authServiceWithStore.GetAccessTokenAsync();
+
+        // Assert - verify the new refresh token was saved
+        Assert.That(mockStore.LastSavedToken, Is.EqualTo(newRefreshToken));
+    }
+
 }

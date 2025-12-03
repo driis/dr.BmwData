@@ -8,7 +8,6 @@ public class BmwOptions
     public string DeviceFlowBaseUrl { get; set; } = "https://customer.bmwgroup.com";
     public string ApiBaseUrl { get; set; } = "https://api-cardata.bmwgroup.com";
     public string ClientId { get; set; } = string.Empty;
-    public string RefreshToken { get; set; }  = string.Empty;
     
     /// <summary>
     /// Initial polling interval in milliseconds. Default is 2000ms (2 seconds).

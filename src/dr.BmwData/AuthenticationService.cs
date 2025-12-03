@@ -10,17 +10,23 @@ public class AuthenticationService : IAuthenticationService
     private readonly HttpClient _httpClient;
     private readonly ILogger<AuthenticationService> _logger;
     private readonly BmwOptions _options;
+    private readonly IRefreshTokenStore _refreshTokenStore;
     private CodeChallenge? _challenge = null;
     private string? _accessToken;
     private string? _refreshToken;
     private DateTime _tokenExpiresAt = DateTime.MinValue;
+    private bool _refreshTokenLoaded;
 
-    public AuthenticationService(HttpClient httpClient, IOptions<BmwOptions> options, ILogger<AuthenticationService> logger)
+    public AuthenticationService(
+        HttpClient httpClient,
+        IOptions<BmwOptions> options,
+        ILogger<AuthenticationService> logger,
+        IRefreshTokenStore refreshTokenStore)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
-        _refreshToken = string.IsNullOrEmpty(_options.RefreshToken) ? null : _options.RefreshToken;
+        _refreshTokenStore = refreshTokenStore;
     }
 
     public bool RequiresInteractiveFlow => !HasValidAuthenticationToken && !HasRefreshToken;
@@ -37,6 +43,9 @@ public class AuthenticationService : IAuthenticationService
             return _accessToken;
         }
 
+        // Try to load refresh token from store if not already loaded
+        await EnsureRefreshTokenLoadedAsync();
+
         // If we have a refresh token, use it to get a new access token
         if (!string.IsNullOrEmpty(_refreshToken))
         {
@@ -47,17 +56,31 @@ public class AuthenticationService : IAuthenticationService
 
         // No token and no refresh token - throw with instructions
         throw new InvalidOperationException(
-            "No valid access token available and no refresh token configured. " +
+            "No valid access token available and no refresh token stored. " +
             "Please run the interactive device flow first by calling InitiateDeviceFlowAsync() " +
-            "followed by PollForTokenAsync(), or configure a refresh token in BmwOptions.");
+            "followed by PollForTokenAsync().");
     }
 
-    private void StoreToken(TokenResponse tokenResponse)
+    public async Task<bool> RequiresInteractiveFlowAsync()
+    {
+        if (HasValidAuthenticationToken)
+            return false;
+
+        await EnsureRefreshTokenLoadedAsync();
+        return !HasRefreshToken;
+    }
+
+    private async Task EnsureRefreshTokenLoadedAsync() => _refreshToken ??= await _refreshTokenStore.GetAsync();
+
+    private async Task StoreTokenAsync(TokenResponse tokenResponse)
     {
         _accessToken = tokenResponse.AccessToken;
         _refreshToken = tokenResponse.RefreshToken;
         // Subtract 60 seconds as a buffer to refresh before actual expiration
         _tokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 60);
+
+        // Persist the new refresh token
+        await _refreshTokenStore.SaveAsync(tokenResponse.RefreshToken);
     }
 
     public async Task<DeviceCodeResponse> InitiateDeviceFlowAsync(string scope)
@@ -103,7 +126,7 @@ public class AuthenticationService : IAuthenticationService
             if (response.IsSuccessStatusCode)
             {
                 var tokenResponse = (await response.Content.ReadFromJsonAsync<TokenResponse>())!;
-                StoreToken(tokenResponse);
+                await StoreTokenAsync(tokenResponse);
                 return tokenResponse.RefreshToken;
             }
 
@@ -138,7 +161,7 @@ public class AuthenticationService : IAuthenticationService
         response.EnsureSuccessStatusCode();
 
         var tokenResponse = (await response.Content.ReadFromJsonAsync<TokenResponse>())!;
-        StoreToken(tokenResponse);
+        await StoreTokenAsync(tokenResponse);
     }
 
     private static FormUrlEncodedContent ToFormUrlEncodedContent<T>(T request)

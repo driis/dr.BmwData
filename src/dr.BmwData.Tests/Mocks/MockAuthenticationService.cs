@@ -15,7 +15,11 @@ public class MockAuthenticationService : IAuthenticationService
         _accessToken = accessToken;
     }
 
+#pragma warning disable CS0618 // Type or member is obsolete
     public bool RequiresInteractiveFlow => false;
+#pragma warning restore CS0618
+
+    public Task<bool> RequiresInteractiveFlowAsync() => Task.FromResult(false);
 
     public Task<string> GetAccessTokenAsync()
     {

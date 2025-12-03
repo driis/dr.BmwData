@@ -24,18 +24,23 @@ Handles authentication and token management for the BMW CarData API.
 **Token Management:**
 - Stores access token and refresh token internally after successful authentication
 - Automatically refreshes expired tokens using the refresh token
-- Supports configured refresh token from `BmwOptions.RefreshToken`
+- Persists refresh tokens via `IRefreshTokenStore` for reuse across application restarts
 
 **Properties:**
-- `RequiresInteractiveFlow`: Checks if interactive device flow is needed
-  - Returns `true` if no valid access token exists and no refresh token is available
-  - Returns `false` if token can be obtained automatically (via cache or refresh)
+- `RequiresInteractiveFlow` (obsolete): Synchronous check - use `RequiresInteractiveFlowAsync()` instead
 
 **Methods:**
+- `RequiresInteractiveFlowAsync()`: Checks if interactive device flow is needed
+  - Returns `true` if no valid access token exists and no refresh token is available
+  - Returns `false` if token can be obtained automatically (via cache, options, or store)
+  - Loads refresh token from `IRefreshTokenStore` if configured
+
 - `GetAccessTokenAsync()`: Gets a valid access token
   - Returns cached token if not expired
+  - Loads refresh token from store if not already loaded
   - Uses refresh token to obtain new access token if expired
-  - Throws `InvalidOperationException` if no token and no refresh token configured
+  - Saves new refresh token to store after refresh
+  - Throws `InvalidOperationException` if no token and no refresh token available
 
 - `InitiateDeviceFlowAsync(string scope)`: Starts the interactive authentication flow
   - Validates that `ClientId` is configured (throws `InvalidOperationException` if missing)
@@ -48,11 +53,29 @@ Handles authentication and token management for the BMW CarData API.
   - Uses the interval and expiration from the response (respects server's polling interval)
   - Waits for user to authorize via browser
   - Handles `authorization_pending` and `slow_down` responses
-  - Stores token internally upon success
+  - Stores token internally and persists refresh token to store upon success
 
 **Private Methods:**
 - `RefreshTokenAsync(string refreshToken)`: Refreshes the access token internally
   - Called automatically by `GetAccessTokenAsync()` when token is expired
+  - Saves new refresh token to store after successful refresh
+
+#### IRefreshTokenStore (Required)
+Abstraction for persisting and loading refresh tokens. Required dependency for `AuthenticationService`. Allows the application to save refresh tokens so they survive application restarts.
+
+**Methods:**
+- `LoadAsync()`: Loads the stored refresh token, returns null if none stored
+- `SaveAsync(string refreshToken)`: Persists the refresh token
+
+**Implementations:**
+- `FileRefreshTokenStore`: File-based implementation
+  - Default location: `~/.bmwdata/refresh_token`
+  - Creates directory if it doesn't exist
+  - Accepts custom file path via constructor
+
+**Authentication Flow:**
+1. First run: No stored token → Interactive device flow required → Token saved to store
+2. Subsequent runs: Token loaded from store → Automatic refresh → New token saved back to store
 
 #### IContainerService / ContainerService
 Handles container management for the BMW CarData API. Uses `IAuthenticationService` internally to obtain access tokens.
@@ -167,10 +190,6 @@ Configuration class that holds all BMW API settings.
   - Default: `https://api-cardata.bmwgroup.com`
   - Used for container and telemetry API endpoints
 
-- `RefreshToken`: Optional refresh token
-  - Can be stored to avoid re-authentication
-  - Used to obtain new access tokens
-
 - `InitialPollIntervalMs`: Initial polling interval in milliseconds
   - Default: `1000` (1 second)
   - Controls how often to poll for token during device flow
@@ -188,7 +207,6 @@ The application supports multiple configuration sources (in order of precedence)
 1. **Environment Variables**: Prefix with `BmwData__`
    ```bash
    BmwData__ClientId=your-client-id
-   BmwData__RefreshToken=your-refresh-token
    ```
 
 2. **appsettings.json**:
@@ -210,7 +228,11 @@ The application supports multiple configuration sources (in order of precedence)
 builder.Services.Configure<BmwOptions>(
     builder.Configuration.GetSection(BmwOptions.SectionName));
 
-builder.Services.AddHttpClient<IAuthenticationService, AuthenticationService>();
+// Register refresh token store for persistent token storage
+builder.Services.AddSingleton<IRefreshTokenStore, FileRefreshTokenStore>();
+
+builder.Services.AddHttpClient<AuthenticationService>();
+builder.Services.AddSingleton<IAuthenticationService>(sp => sp.GetRequiredService<AuthenticationService>());
 builder.Services.AddHttpClient<IContainerService, ContainerService>();
 ```
 
@@ -390,29 +412,38 @@ dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
 8. `RequiresInteractiveFlow_NoTokenAndNoRefreshToken_ReturnsTrue`
    - Tests that interactive flow is required when no tokens available
 
-9. `RequiresInteractiveFlow_WithConfiguredRefreshToken_ReturnsFalse`
-   - Tests that interactive flow is not required when refresh token is configured
-
-10. `RequiresInteractiveFlow_AfterDeviceFlow_ReturnsFalse`
+9. `RequiresInteractiveFlow_AfterDeviceFlow_ReturnsFalse`
     - Tests that interactive flow is not required after successful device flow
 
-11. `GetAccessTokenAsync_AfterDeviceFlow_ReturnsStoredToken`
+10. `GetAccessTokenAsync_AfterDeviceFlow_ReturnsStoredToken`
     - Verifies token is stored and returned after device flow
 
-12. `GetAccessTokenAsync_WithConfiguredRefreshToken_RefreshesAndReturnsToken`
-    - Tests automatic token refresh when refresh token is configured
-
-13. `GetAccessTokenAsync_NoTokenAndNoRefreshToken_ThrowsInvalidOperationException`
+11. `GetAccessTokenAsync_NoTokenAndNoRefreshToken_ThrowsInvalidOperationException`
     - Tests error when no token available
 
-14. `GetAccessTokenAsync_TokenNotExpired_ReturnsCachedToken`
+12. `GetAccessTokenAsync_TokenNotExpired_ReturnsCachedToken`
     - Verifies cached token is returned without refreshing
 
-15. `InitiateDeviceFlowAsync_MissingClientId_ThrowsInvalidOperationException`
+13. `InitiateDeviceFlowAsync_MissingClientId_ThrowsInvalidOperationException`
     - Tests that empty ClientId throws exception with helpful message
 
-16. `InitiateDeviceFlowAsync_NullClientId_ThrowsInvalidOperationException`
+14. `InitiateDeviceFlowAsync_NullClientId_ThrowsInvalidOperationException`
     - Tests that null ClientId throws exception
+
+15. `RequiresInteractiveFlowAsync_WithStoredRefreshToken_ReturnsFalse`
+    - Tests that stored refresh token from IRefreshTokenStore is loaded
+
+16. `RequiresInteractiveFlowAsync_NoTokenAnywhere_ReturnsTrue`
+    - Tests that interactive flow is required when no tokens available anywhere
+
+17. `GetAccessTokenAsync_WithStoredRefreshToken_RefreshesAndReturnsToken`
+    - Tests automatic token refresh using stored refresh token
+
+18. `PollForTokenAsync_Success_SavesRefreshTokenToStore`
+    - Verifies refresh token is persisted to store after device flow
+
+19. `RefreshToken_UpdatesStoredToken`
+    - Verifies new refresh token is saved after token refresh
 
 **ContainerService Tests:**
 

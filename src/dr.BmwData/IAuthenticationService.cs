@@ -7,8 +7,16 @@ public interface IAuthenticationService
     /// <summary>
     /// Checks if the interactive device flow is required to obtain a valid token.
     /// Returns true if no valid access token exists and no refresh token is available.
+    /// Note: This property cannot check the refresh token store. Use RequiresInteractiveFlowAsync() instead.
     /// </summary>
+    [Obsolete("Use RequiresInteractiveFlowAsync() instead to properly check the refresh token store.")]
     bool RequiresInteractiveFlow { get; }
+
+    /// <summary>
+    /// Checks if the interactive device flow is required to obtain a valid token.
+    /// Returns true if no valid access token exists and no refresh token is available (including from the store).
+    /// </summary>
+    Task<bool> RequiresInteractiveFlowAsync();
 
     /// <summary>
     /// Gets a valid access token. If no token is available or the current token is expired,
