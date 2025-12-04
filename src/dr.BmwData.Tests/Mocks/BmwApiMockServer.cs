@@ -205,6 +205,133 @@ public class BmwApiMockServer : IDisposable
     }
 
     /// <summary>
+    /// Configures the vehicle mappings endpoint to return a successful response.
+    /// </summary>
+    public void SetupGetVehicleMappingsSuccess(params (string vin, string mappedSince, string mappingType)[] mappings)
+    {
+        var mappingsJson = string.Join(",", mappings.Select(m => $@"{{
+            ""vin"": ""{m.vin}"",
+            ""mappedSince"": ""{m.mappedSince}"",
+            ""mappingType"": ""{m.mappingType}""
+        }}"));
+
+        _server
+            .Given(Request.Create()
+                .WithPath("/customers/vehicles/mappings")
+                .WithHeader("Authorization", "Bearer *")
+                .WithHeader("x-version", "v1")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody($"[{mappingsJson}]"));
+    }
+
+    /// <summary>
+    /// Configures the vehicle mappings endpoint to return an empty list.
+    /// </summary>
+    public void SetupGetVehicleMappingsEmpty()
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath("/customers/vehicles/mappings")
+                .WithHeader("Authorization", "Bearer *")
+                .WithHeader("x-version", "v1")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody("[]"));
+    }
+
+    /// <summary>
+    /// Configures the vehicle mappings endpoint to return an unauthorized error.
+    /// </summary>
+    public void SetupGetVehicleMappingsUnauthorized()
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath("/customers/vehicles/mappings")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.Unauthorized)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(@"{""exveErrorId"": ""401"", ""exveErrorMsg"": ""Unauthorized""}"));
+    }
+
+    /// <summary>
+    /// Configures the telematic data endpoint to return a successful response.
+    /// </summary>
+    public void SetupGetTelematicDataSuccess(string vin, string containerId, Dictionary<string, (string value, string unit, string timestamp)> data)
+    {
+        var dataJson = string.Join(",", data.Select(kvp => $@"""{kvp.Key}"": {{
+            ""value"": ""{kvp.Value.value}"",
+            ""unit"": ""{kvp.Value.unit}"",
+            ""timestamp"": ""{kvp.Value.timestamp}""
+        }}"));
+
+        _server
+            .Given(Request.Create()
+                .WithPath($"/customers/vehicles/{vin}/telematicData")
+                .WithParam("containerId", containerId)
+                .WithHeader("Authorization", "Bearer *")
+                .WithHeader("x-version", "v1")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody($@"{{""telematicData"": {{{dataJson}}}}}"));
+    }
+
+    /// <summary>
+    /// Configures the telematic data endpoint to return a not found error.
+    /// </summary>
+    public void SetupGetTelematicDataNotFound(string vin)
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath($"/customers/vehicles/{vin}/telematicData")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.NotFound)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(@"{""exveErrorId"": ""404"", ""exveErrorMsg"": ""Vehicle not found""}"));
+    }
+
+    /// <summary>
+    /// Configures the telematic data endpoint to return an unauthorized error.
+    /// </summary>
+    public void SetupGetTelematicDataUnauthorized(string vin)
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath($"/customers/vehicles/{vin}/telematicData")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.Unauthorized)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(@"{""exveErrorId"": ""401"", ""exveErrorMsg"": ""Unauthorized""}"));
+    }
+
+    /// <summary>
+    /// Configures the telematic data endpoint to return data with a null timestamp.
+    /// </summary>
+    public void SetupGetTelematicDataWithNullTimestamp(string vin, string containerId)
+    {
+        _server
+            .Given(Request.Create()
+                .WithPath($"/customers/vehicles/{vin}/telematicData")
+                .WithParam("containerId", containerId)
+                .WithHeader("Authorization", "Bearer *")
+                .WithHeader("x-version", "v1")
+                .UsingGet())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(@"{""telematicData"": {""FUEL_LEVEL"": {""value"": ""75.5"", ""unit"": ""PERCENT"", ""timestamp"": null}}}"));
+    }
+
+    /// <summary>
     /// Resets all configured mappings.
     /// </summary>
     public void Reset()

@@ -6,10 +6,16 @@ public enum Command
     List,
     Create,
     Get,
-    Delete
+    Delete,
+    Mappings,
+    GetData
 }
 
-public record CommandLineArgs(Command Command, string? ContainerId = null, string[]? TechnicalDescriptors = null)
+public record CommandLineArgs(
+    Command Command,
+    string? ContainerId = null,
+    string[]? TechnicalDescriptors = null,
+    string? Vin = null)
 {
     public static CommandLineArgs Parse(string[] args)
     {
@@ -28,6 +34,9 @@ public record CommandLineArgs(Command Command, string? ContainerId = null, strin
             "get" => throw new ArgumentException("Get command requires a container ID."),
             "delete" when args.Length > 1 => new CommandLineArgs(Command.Delete, ContainerId: args[1]),
             "delete" => throw new ArgumentException("Delete command requires a container ID."),
+            "mappings" => new CommandLineArgs(Command.Mappings),
+            "get-data" when args.Length > 2 => new CommandLineArgs(Command.GetData, ContainerId: args[2], Vin: args[1]),
+            "get-data" => throw new ArgumentException("get-data command requires a VIN and container ID. Usage: get-data <vin> <containerId>"),
             _ => throw new ArgumentException($"Unknown command: {args[0]}")
         };
     }
@@ -35,22 +44,30 @@ public record CommandLineArgs(Command Command, string? ContainerId = null, strin
     public static void PrintHelp()
     {
         System.Console.WriteLine("""
-            BMW CarData Console - Container Management
+            BMW CarData Console
 
             Usage: dr.BmwData.Console <command> [arguments]
 
-            Commands:
-              help                          Show this help message
+            Container Commands:
               list                          List all containers
               create <descriptor> [...]     Create a new container with the specified technical descriptors
               get <containerId>             Get container details (outputs JSON)
               delete <containerId>          Delete a container
+
+            Telemetry Commands:
+              mappings                      List all mapped vehicles
+              get-data <vin> <containerId>  Get telematic data for a vehicle
+
+            Other Commands:
+              help                          Show this help message
 
             Examples:
               dr.BmwData.Console list
               dr.BmwData.Console create FUEL_LEVEL MILEAGE CHARGING_STATUS
               dr.BmwData.Console get abc123-container-id
               dr.BmwData.Console delete abc123-container-id
+              dr.BmwData.Console mappings
+              dr.BmwData.Console get-data WBA12345678901234 abc123-container-id
 
             Technical Descriptors:
               Common descriptors include: FUEL_LEVEL, MILEAGE, CHARGING_STATUS, DOOR_LOCK_STATE,
@@ -58,8 +75,7 @@ public record CommandLineArgs(Command Command, string? ContainerId = null, strin
 
             Authentication:
               If not authenticated, the app will initiate an interactive device code flow.
-              You can configure a refresh token in appsettings.json or via environment variable
-              BmwData__RefreshToken to skip interactive login.
+              The refresh token is saved automatically to ~/.bmwdata/refresh_token.
             """);
     }
 }

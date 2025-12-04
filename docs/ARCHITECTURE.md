@@ -77,6 +77,19 @@ Abstraction for persisting and loading refresh tokens. Required dependency for `
 1. First run: No stored token → Interactive device flow required → Token saved to store
 2. Subsequent runs: Token loaded from store → Automatic refresh → New token saved back to store
 
+#### ITelemetryService / TelemetryService
+Handles vehicle telemetry data retrieval from the BMW CarData API. Uses `IAuthenticationService` internally to obtain access tokens.
+
+**Methods:**
+- `GetVehicleMappingsAsync()`: Gets list of vehicles mapped to the customer account
+  - Returns `VehicleMappingResponse` with array of `VehicleMapping` objects
+  - Each mapping includes VIN, mapped since date, and mapping type (PRIMARY/SECONDARY)
+
+- `GetTelematicDataAsync(string vin, string containerId)`: Gets telematic data for a vehicle
+  - Takes VIN and container ID as parameters
+  - Returns `TelematicDataResponse` with dictionary of telematic data entries
+  - Each entry includes value, unit, and timestamp
+
 #### IContainerService / ContainerService
 Handles container management for the BMW CarData API. Uses `IAuthenticationService` internally to obtain access tokens.
 
@@ -142,6 +155,23 @@ All models use **C# records with primary constructors**:
 
 - `ContainerState`: Enum representing container state
   - `ACTIVE`, `DELETED`
+
+#### Telemetry Models
+
+- `VehicleMappingResponse`: Response from vehicle mappings endpoint
+  - `Mappings` (array of `VehicleMapping`)
+
+- `VehicleMapping`: Represents a vehicle mapped to the customer
+  - `Vin`, `MappedSince`, `MappingType`
+
+- `MappingType`: Enum for vehicle mapping type
+  - `PRIMARY`, `SECONDARY`
+
+- `TelematicDataResponse`: Response from telematic data endpoint
+  - `TelematicData` (dictionary of string to `TelematicDataEntry`)
+
+- `TelematicDataEntry`: A single telematic data point
+  - `Value`, `Unit`, `Timestamp`
 
 ### Authentication Flow
 
@@ -297,6 +327,18 @@ All container endpoints require headers: `Authorization: Bearer {accessToken}`, 
 **Delete Container:**
 - URL: `DELETE {ApiBaseUrl}/customers/containers/{containerId}`
 - Response: No content (HTTP 204)
+
+### Telemetry Endpoints
+
+All telemetry endpoints require headers: `Authorization: Bearer {accessToken}`, `x-version: v1`
+
+**Get Vehicle Mappings:**
+- URL: `GET {ApiBaseUrl}/customers/vehicles/mappings`
+- Response: Array of `VehicleMapping` (HTTP 200)
+
+**Get Telematic Data:**
+- URL: `GET {ApiBaseUrl}/customers/vehicles/{vin}/telematicData?containerId={containerId}`
+- Response: `TelematicDataResponse` (HTTP 200)
 
 ### Error Handling
 
@@ -480,6 +522,28 @@ dotnet test src/dr.BmwData.Tests/dr.BmwData.Tests.csproj
 
 11. `DeleteContainerAsync_NotFound_ThrowsHttpRequestException`
     - Tests 404 not found error handling for delete operation
+
+**TelemetryService Tests:**
+
+1. `GetVehicleMappingsAsync_Success_ReturnsMappings`
+   - Verifies successful retrieval of vehicle mappings
+   - Validates VINs and mapping types
+
+2. `GetVehicleMappingsAsync_Empty_ReturnsEmptyList`
+   - Tests empty response handling
+
+3. `GetVehicleMappingsAsync_Unauthorized_ThrowsHttpRequestException`
+   - Tests 401 unauthorized error handling
+
+4. `GetTelematicDataAsync_Success_ReturnsTelematicData`
+   - Verifies successful retrieval of telematic data
+   - Validates data values, units, and timestamps
+
+5. `GetTelematicDataAsync_NotFound_ThrowsHttpRequestException`
+   - Tests 404 not found error handling for unknown VIN
+
+6. `GetTelematicDataAsync_Unauthorized_ThrowsHttpRequestException`
+   - Tests 401 unauthorized error handling
 
 All tests use mock servers (`BmwAuthMockServer` and `BmwApiMockServer`) to mock HTTP endpoints, ensuring tests are fast, reliable, and independent of external services.
 

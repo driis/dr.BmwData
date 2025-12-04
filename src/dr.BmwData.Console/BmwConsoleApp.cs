@@ -9,6 +9,7 @@ namespace dr.BmwData.Console;
 public class BmwConsoleApp(
     IAuthenticationService authService,
     IContainerService containerService,
+    ITelemetryService telemetryService,
     ILogger<BmwConsoleApp> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -79,6 +80,12 @@ public class BmwConsoleApp(
                 case Command.Delete:
                     await DeleteContainerAsync(args.ContainerId!);
                     break;
+                case Command.Mappings:
+                    await GetMappingsAsync();
+                    break;
+                case Command.GetData:
+                    await GetTelematicDataAsync(args.Vin!, args.ContainerId!);
+                    break;
             }
         }
         catch (HttpRequestException ex)
@@ -142,5 +149,51 @@ public class BmwConsoleApp(
         WriteLine($"Deleting container: {containerId}");
         await containerService.DeleteContainerAsync(containerId);
         WriteLine("Container deleted successfully.");
+    }
+
+    private async Task GetMappingsAsync()
+    {
+        WriteLine("Fetching vehicle mappings...");
+        var response = await telemetryService.GetVehicleMappingsAsync();
+
+        if (response.Mappings.Length == 0)
+        {
+            WriteLine("No mapped vehicles found.");
+            return;
+        }
+
+        WriteLine($"Found {response.Mappings.Length} mapped vehicle(s):");
+        WriteLine();
+
+        foreach (var mapping in response.Mappings)
+        {
+            WriteLine($"  VIN:          {mapping.Vin}");
+            WriteLine($"  Mapped Since: {mapping.MappedSince:yyyy-MM-dd HH:mm:ss}");
+            WriteLine($"  Type:         {mapping.MappingType}");
+            WriteLine();
+        }
+    }
+
+    private async Task GetTelematicDataAsync(string vin, string containerId)
+    {
+        WriteLine($"Fetching telematic data for VIN: {vin}");
+        var response = await telemetryService.GetTelematicDataAsync(vin, containerId);
+
+        if (response.TelematicData.Count == 0)
+        {
+            WriteLine("No telematic data available.");
+            return;
+        }
+
+        WriteLine($"Telematic data ({response.TelematicData.Count} entries):");
+        WriteLine();
+
+        foreach (var (key, entry) in response.TelematicData)
+        {
+            WriteLine($"  {key}:");
+            WriteLine($"    Value:     {entry.Value} {entry.Unit}");
+            WriteLine($"    Timestamp: {entry.Timestamp:yyyy-MM-dd HH:mm:ss}");
+            WriteLine();
+        }
     }
 }

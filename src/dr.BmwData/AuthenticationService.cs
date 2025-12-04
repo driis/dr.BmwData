@@ -15,7 +15,6 @@ public class AuthenticationService : IAuthenticationService
     private string? _accessToken;
     private string? _refreshToken;
     private DateTime _tokenExpiresAt = DateTime.MinValue;
-    private bool _refreshTokenLoaded;
 
     public AuthenticationService(
         HttpClient httpClient,

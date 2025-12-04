@@ -17,6 +17,7 @@ builder.Services.AddSingleton<IRefreshTokenStore, FileRefreshTokenStore>();
 builder.Services.AddHttpClient<AuthenticationService>();
 builder.Services.AddSingleton<IAuthenticationService>(sp => sp.GetRequiredService<AuthenticationService>());
 builder.Services.AddHttpClient<IContainerService, ContainerService>();
+builder.Services.AddHttpClient<ITelemetryService, TelemetryService>();
 builder.Services.AddTransient<BmwConsoleApp>();
 
 // Parse command-line arguments
